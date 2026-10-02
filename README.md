@@ -227,7 +227,7 @@ Downloading and opening `medirozahospital.com/old/mediroza_db_backup_2019.sql` r
 
 ![shareholders table exposed](./WK4-Evidence/shareholders-exposed-data.png)
 
-Full raw evidence (table structure + dumped rows) is preserved in [`evidence/mediroza_db_backup_2019.sql.md`](./evidence/mediroza_db_backup_2019.sql.md) for the record; salary figures ranged from roughly R26,000/month (Pharmacy Assistant) up to R160,000/month (Medical Director), across clinical, nursing, radiology, pharmacy, IT, finance, HR and operations staff.
+Full raw evidence (table structure + dumped rows) is preserved in [`evidence/mediroza_db_backup_2019.sql.md`](./Data-Exposed-Results/mediroza_db_backup_2019.sql.md) for the record; salary figures ranged from roughly R26,000/month (Pharmacy Assistant) up to R160,000/month (Medical Director), across clinical, nursing, radiology, pharmacy, IT, finance, HR and operations staff.
 
 **M3 Deliverable:** Full staff salary register (30 employees, including national ID numbers and compensation) and the complete shareholder/cap table (10 shareholders) recovered from an unauthenticated, indexable legacy backup file at `/old/mediroza_db_backup_2019.sql` — discoverable via the same `robots.txt` disclosure identified in M1.
 
