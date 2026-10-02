@@ -66,41 +66,41 @@ Taken together, these findings represent a **critical, chained confidentiality b
 
 `whois` confirmed the domain is registered via NameCheap, created 2026-08-14, using NameCheap's own DNS infrastructure (`dns1/dns2.namecheaphosting.com`).
 
-![whois](./WK4 Evidence/whois.png)
+![whois](./WK4-Evidence/whois.png)
 
 `nslookup` resolved the apex domain to `199.188.201.16`.
 
-![nslookup](./WK4 Evidence/nslookup.png)
+![nslookup](./WK4-Evidence/nslookup.png)
 
 `dnsrecon` enumerated SOA, NS, MX and SPF/DMARC records, confirming the mail setup (jellyfish.systems hosting) and that the domain uses cPanel-based autodiscover endpoints.
 
-![dnsrecon](./WK4 Evidence/dnsrecon.png)
+![dnsrecon](./WK4-Evidence/dnsrecon.png)
 
 A `curl -I` request against the site fingerprinted the web server as **LiteSpeed**.
 
-![curl header](./WK4 Evidence/curl_header.png)
+![curl header](./WK4-Evidence/curl_header.png)
 
 `wafw00f` confirmed the site sits behind a **LiteSpeed WAF**, which was factored into request pacing during active scanning.
 
-![wafw00f](./WK4 Evidence/wafw00f.png)
+![wafw00f](./WK4-Evidence/wafw00f.png)
 
 ### Content Discovery
 
 `gobuster` was run against the target using `dirb`'s common wordlist, revealing a large number of `mod_userdir`-style `~username` redirects (301) alongside several 403-protected admin/control-panel paths (`cgi-bin`, `controlpanel`, `server-status`, `webmail`). Notably, `/old/`, `/staff/`, `/robots.txt` and `/sitemap.xml` returned non-404 responses, indicating they existed but were access-restricted or worth investigating further.
 
-![gobuster result 1](./WK4 Evidence/gobuster-result1.png)
-![gobuster result 2](./WK4 Evidence/gobuster-result2.png)
+![gobuster result 1](./WK4-Evidence/gobuster-result1.png)
+![gobuster result 2](./WK4-Evidence/gobuster-result2.png)
 
 `robots.txt` itself confirmed three interesting hidden paths that the site owner explicitly tried to keep out of search engines: `/patient/`, `/staff/`, and `/old/` — effectively a roadmap to the sensitive areas of the application ("security through obscurity").
 
-![robots.txt](./WK4 Evidence/robots-txt.png)
+![robots.txt](./WK4-Evidence/robots-txt.png)
 
 ### Authentication Analysis
 
 The Patient Portal login page (`/patient/login.php`) was tested with a non-existent username, which returned a specific **"Username not found"** error. This is a **username enumeration** vulnerability — distinguishing "wrong username" from "wrong password" responses lets an attacker build a list of valid accounts before attempting credential attacks.
 
-![admin login - username not found](./WK4 Evidence/admin-login.png)
-![user not found](./WK4 Evidence/user-not-found.png)
+![admin login - username not found](./WK4-Evidence/admin-login.png)
+![user not found](./WK4-Evidence/user-not-found.png)
 
 ### Broken Access Control
 
@@ -108,7 +108,7 @@ The Patient Portal login page (`/patient/login.php`) was tested with a non-exist
 
 Despite the login form rejecting the test username, navigating **directly** to `medirozahospital.com/patient/portal.php` returned the fully rendered "My lab reports" page — without ever successfully authenticating. This is a **broken access control / missing authentication check** on a sensitive page: the application relies on hiding the URL (and blocking it via `robots.txt`) rather than enforcing a server-side session check.
 
-![patient portal - unauthenticated access](./WK4 Evidence/password-required.png)
+![patient portal - unauthenticated access](./WK4-Evidence/password-required.png)
 
 The portal listed three encrypted PDF lab reports belonging to named patients (S. Dlamini, P. Reddy, E. Thompson), each downloadable without any further authorization check.
 
@@ -124,55 +124,55 @@ Each retrieved PDF was protected with 128-bit RC4/AES encryption (PDF Revision 3
 
 A `pdf2john`-compatible hash was extracted using the Networkwalks Hash Calculator tool:
 
-![hash calculator](./WK4 Evidence/networkwalks-hash-calculator.png)
-![hash retrieved - PDF1](./WK4 Evidence/hash-retrieved-PDF1.png)
+![hash calculator](./WK4-Evidence/networkwalks-hash-calculator.png)
+![hash retrieved - PDF1](./WK4-Evidence/hash-retrieved-PDF1.png)
 
 A dictionary attack against this hash cracked the password on the first attempt:
 
-![password cracked - PDF1 (123456)](./WK4 Evidence/password-cracked-PDF1.png)
+![password cracked - PDF1 (123456)](./WK4-Evidence/password-cracked-PDF1.png)
 
 **Recovered password:** `123456`
 
 Using this password, the file opened to reveal the pathology report for **Sipho Dlamini** (Patient ID `MG-P-10231`, Lab Ref `LR-2024-1187`) — full blood count results including haemoglobin, white cell count, platelets, glucose and creatinine.
 
-![PDF1 unlocked](./WK4 Evidence/PDF1-unlocked.png)
+![PDF1 unlocked](./WK4-Evidence/PDF1-unlocked.png)
 
 ### File 2 — `patient_report_2.pdf`
 
 The same process was repeated for the second file. Its hash was extracted:
 
-![hash retrieved - PDF2](./WK4 Evidence/hash-retrieved-PDF2.png)
+![hash retrieved - PDF2](./WK4-Evidence/hash-retrieved-PDF2.png)
 
 This file used a different, equally weak password, confirming the hint that a single approach would not work for all three files:
 
-![password cracked - PDF2 (password)](./WK4 Evidence/password-cracked-PDF2.png)
+![password cracked - PDF2 (password)](./WK4-Evidence/password-cracked-PDF2.png)
 
 **Recovered password:** `password`
 
 Unlocked contents — pathology (lipid profile) report for **Priya Reddy** (Patient ID `MG-P-10244`, Lab Ref `LR-2024-1192`):
 
-![PDF2 unlocked](./WK4 Evidence/PDF2-unlocked.png)
+![PDF2 unlocked](./WK4-Evidence/PDF2-unlocked.png)
 
 ### File 3 — `patient_report_3.pdf`
 
 This file's hash was uploaded to the cracking tool in the same way:
 
-![hash upload - PDF3](./WK4 Evidence/hash-PDF3-upload.png)
-![hash retrieved - PDF3](./WK4 Evidence/hash-retrieved-PDF3.png)
+![hash upload - PDF3](./WK4-Evidence/hash-PDF3-upload.png)
+![hash retrieved - PDF3](./WK4-Evidence/hash-retrieved-PDF3.png)
 
 The built-in 100-word list was exhausted with **no match**, confirming the earlier hint not to assume a single wordlist/approach would work for every file:
 
-![PDF3 password unmatched - wordlist exhausted](./WK4 Evidence/PDF3-password-unmatched.png)
+![PDF3 password unmatched - wordlist exhausted](./WK4-Evidence/PDF3-password-unmatched.png)
 
 Re-running the attack against a larger wordlist (3,556 entries) successfully cracked the password:
 
-![password cracked - PDF3](./WK4 Evidence/password-cracked-PDF3.png)
+![password cracked - PDF3](./WK4-Evidence/password-cracked-PDF3.png)
 
 **Recovered password:** `!@#$%^&` — a symbol-only password that defeated the small default list but fell to a slightly larger dictionary, underscoring that "complex-looking" passwords are still weak if they're a common/reused pattern.
 
 Unlocked contents — pathology (full blood count) report for **Emily Thompson** (Patient ID `MG-P-10258`, Lab Ref `LR-2024-1205`):
 
-![PDF3 unlocked](./WK4 Evidence/PDF3-unlocked.png)
+![PDF3 unlocked](./WK4-Evidence/PDF3-unlocked.png)
 
 **M2 Deliverable:** All three PDF encryption passwords recovered via dictionary attack — `123456` (File 1), `password` (File 2), `!@#$%^&` (File 3). Full contents of all three lab reports confirmed accessible in plaintext.
 
@@ -190,9 +190,9 @@ As hinted ("look beyond the obvious content — examine all file properties care
 | `patient_report_2.pdf` | Mediroza Diagnostics Lab | Lipid Profile | Mediroza CMS 1.4.2 |
 | `patient_report_3.pdf` | **j.malik** | Full Blood Count | Mediroza CMS 1.4.2 |
 
-![PDF1 properties](./WK4 Evidence/PDF1-properties.png)
-![PDF2 properties](./WK4 Evidence/PDF2-properties.png)
-![PDF3 properties](./WK4 Evidence/PDF3-properties-chhanged.png)
+![PDF1 properties](./WK4-Evidence/PDF1-properties.png)
+![PDF2 properties](./WK4-Evidence/PDF2-properties.png)
+![PDF3 properties](./WK4-Evidence/PDF3-properties-chhanged.png)
 
 Files 1 and 2 were generated with the generic "Mediroza Diagnostics Lab" author tag, but File 3 was authored under the account **`j.malik`** — an individual username rather than the standard service account. This stood out as worth pivoting on.
 
@@ -200,13 +200,13 @@ Files 1 and 2 were generated with the generic "Mediroza Diagnostics Lab" author 
 
 `j.malik` matched a username pattern already seen in the `/staff/` area implied by `robots.txt`, and combined with the earlier directory enumeration, the `/old/` path (also disallowed in `robots.txt`, also flagged as a live redirect by `gobuster`) was checked directly. Directory listing was enabled and exposed a single file: a legacy MySQL backup.
 
-![index of /old/](./WK4 Evidence/index-old.png)
+![index of /old/](./WK4-Evidence/index-old.png)
 
 Downloading and opening `medirozahospital.com/old/mediroza_db_backup_2019.sql` revealed two full database tables dumped in plaintext SQL:
 
 **`staff` table** — 30 rows, including every employee's full name, job title, department, work email, phone number, **national ID number**, and **monthly salary (ZAR)**. Row 9 confirms the link back to the PDF metadata clue: `Jameel Malik`, **IT Systems Administrator**, IT department — i.e. the account whose name appeared as the "author" of File 3's PDF.
 
-![staff table exposed](./WK4 Evidence/staff-exposed-data.png)
+![staff table exposed](./WK4-Evidence/staff-exposed-data.png)
 
 **`shareholders` table** — 10 rows, listing each shareholder's name, shareholding percentage, number of shares held, and share class:
 
@@ -223,7 +223,7 @@ Downloading and opening `medirozahospital.com/old/mediroza_db_backup_2019.sql` r
 | Michael Roberts | 6.0% | 60,000 | Ordinary |
 | Dr. Vikram Chetty | 4.0% | 40,000 | Preferential |
 
-![shareholders table exposed](./WK4 Evidence/shareholders-exposed-data.png)
+![shareholders table exposed](./WK4-Evidence/shareholders-exposed-data.png)
 
 Full raw evidence (table structure + dumped rows) is preserved in [`evidence/mediroza_db_backup_2019.sql.md`](./evidence/mediroza_db_backup_2019.sql.md) for the record; salary figures ranged from roughly R26,000/month (Pharmacy Assistant) up to R160,000/month (Medical Director), across clinical, nursing, radiology, pharmacy, IT, finance, HR and operations staff.
 
