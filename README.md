@@ -60,7 +60,7 @@ Taken together, these findings represent a **critical, chained confidentiality b
 
 ---
 
-## Module 1 — Reconnaissance & Initial Access
+## M1 — Reconnaissance & Initial Access
 
 ### Passive Reconnaissance
 
@@ -78,7 +78,7 @@ Taken together, these findings represent a **critical, chained confidentiality b
 
 A `curl -I` request against the site fingerprinted the web server as **LiteSpeed**.
 
-![curl header](./WK4-Evidence/curl_header.png)
+![curl header](./WK4-Evidence/curl-header.png)
 
 `wafw00f` confirmed the site sits behind a **LiteSpeed WAF**, which was factored into request pacing during active scanning.
 
@@ -97,28 +97,30 @@ A `curl -I` request against the site fingerprinted the web server as **LiteSpeed
 
 ### Authentication Analysis
 
-The Patient Portal login page (`/patient/login.php`) was tested with a non-existent username, which returned a specific **"Username not found"** error. This is a **username enumeration** vulnerability — distinguishing "wrong username" from "wrong password" responses lets an attacker build a list of valid accounts before attempting credential attacks.
+The Patient Portal login page (`/patient/login.php`) was tested with a non-existent username, which returned a specific **"Username not found"** error.
 
-![admin login - username not found](./WK4-Evidence/admin-login.png)
 ![user not found](./WK4-Evidence/user-not-found.png)
 
-### Broken Access Control
+Using a standard SQL boolean payload `admin'--`, the underlying database query evaluated to true, granting access without password validation.
 
-> **Note:** confirm this matches your actual steps — adjust the wording below if you reached the portal a different way (e.g. session fixation, predictable token, IDOR on a report ID) rather than a direct unauthenticated request.
+![admin login - username not found](./WK4-Evidence/admin-login.png)
 
-Despite the login form rejecting the test username, navigating **directly** to `medirozahospital.com/patient/portal.php` returned the fully rendered "My lab reports" page — without ever successfully authenticating. This is a **broken access control / missing authentication check** on a sensitive page: the application relies on hiding the URL (and blocking it via `robots.txt`) rather than enforcing a server-side session check.
+The available PDF medical reports were downloaded for offline security verification:
+
+| File | Lab Reference | Encryption |
+| --- | --- | --- |
+| `patient_report_1.pdf` | `LR-2024-1187` | Password Locked |
+| `patient_report_2.pdf` | `LR-2024-1192` | Password Locked |
+| `patient_report_3.pdf` | `LR-2024-1205` | Password Locked |
+
 
 ![patient portal - unauthenticated access](./WK4-Evidence/password-required.png)
-
-The portal listed three encrypted PDF lab reports belonging to named patients (S. Dlamini, P. Reddy, E. Thompson), each downloadable without any further authorization check.
-
-**M1 Deliverable:** Unauthenticated access to the patient portal achieved via forced browsing to `/patient/portal.php`; three encrypted PDF lab reports retrieved (`patient_report_1.pdf`, `patient_report_2.pdf`, and a third file for E. Thompson).
 
 ---
 
 ## M2 — Data Extraction (PDF Decryption)
 
-Each retrieved PDF was protected with 128-bit RC4/AES encryption (PDF Revision 3, Version 2). Rather than assume a single method would work, each file's hash was extracted individually and cracked independently as instructed.
+Each retrieved PDF was protected. Rather than assume a single method would work, each file's hash was extracted individually and cracked independently as instructed.
 
 ### File 1 — `patient_report_1.pdf`
 
@@ -174,7 +176,7 @@ Unlocked contents — pathology (full blood count) report for **Emily Thompson**
 
 ![PDF3 unlocked](./WK4-Evidence/PDF3-unlocked.png)
 
-**M2 Deliverable:** All three PDF encryption passwords recovered via dictionary attack — `123456` (File 1), `password` (File 2), `!@#$%^&` (File 3). Full contents of all three lab reports confirmed accessible in plaintext.
+All three PDF encryption passwords recovered via dictionary attack — `123456` (File 1), `password` (File 2), `!@#$%^&` (File 3). Full contents of all three lab reports confirmed accessible in plaintext.
 
 ---
 
@@ -231,6 +233,64 @@ Full raw evidence (table structure + dumped rows) is preserved in [`evidence/med
 
 ---
 
+# ⛓️ Composite Attack Vector
+
+The diagram below outlines the full multi-stage attack chain discovered during the assessment:
+
+```text
+                         ┌──────────────────────┐
+                         │   RECONNAISSANCE     │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │     robots.txt       │
+                         │ /patient/ /staff/    │
+                         │       /old/          │
+                         └──────────┬───────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    │                               │
+                    ▼                               ▼
+          ┌──────────────────┐            ┌──────────────────┐
+          │ Patient Login    │            │   /old/          │
+          │ login.php        │            │ Directory Listing│
+          └────────┬─────────┘            └────────┬─────────┘
+                   │                               │
+                   ▼                               ▼
+          ┌──────────────────┐            ┌──────────────────┐
+          │ SQL Injection    │            │ SQL Backup       │
+          │ Authentication   │            │ Exposure         │
+          │ Bypass           │            └────────┬─────────┘
+          └────────┬─────────┘                     │
+                   │                               ▼
+                   ▼                      ┌──────────────────┐
+          ┌──────────────────┐            │ Staff PII        │
+          │ Patient Portal   │            │ Salaries         │
+          └────────┬─────────┘            │ Shareholders     │
+                   │                      └──────────────────┘
+                   ▼
+          ┌──────────────────┐
+          │ 3x Patient PDFs  │
+          └────────┬─────────┘
+                   │
+                   ▼
+          ┌──────────────────┐
+          │ Weak PDF         │
+          │ Passwords        │
+          └────────┬─────────┘
+                   │
+                   ▼
+          ┌──────────────────┐
+          │ Protected Health │
+          │ Information      │
+          │ Exposure         │
+          └──────────────────┘
+
+```
+
+---
+
 ## Findings Summary & Risk Ratings
 
 | # | Finding | Risk | Justification |
@@ -255,4 +315,24 @@ Full raw evidence (table structure + dumped rows) is preserved in [`evidence/med
 
 ---
 
+# 🔐 Ethics & Compliance
+
 *This report was produced as part of a Networkwalks Academy training exercise in a controlled environment. All testing was authorized in writing and limited to the agreed scope.*
+
+# 👤 Author
+
+**Favour Ayang** 
+Batch: B0B3 
+Cybersecurity Student — Networkwalks Academy
+
+---
+
+# 📋 Assessment Overview
+
+| Parameter | Value |
+| --- | --- |
+| **Program** | Networkwalks Academy |
+| **Batch** | B0B3 |
+| **Milestones Covered** | M1, M2, M3, M4 |
+| **Primary Focus** | Web Security & Vulnerability Analysis |
+| **Status** | Fully Documented & Concluded |
